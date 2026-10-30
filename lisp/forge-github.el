@@ -55,201 +55,186 @@
 ;;; Pull
 ;;;; GraphQL
 
-(defconst forge--github-identify-repo-query
-  '(query
-    (  repository
-       [(owner $owner String!)
-        (name  $name  String!)]
-       (owner login)
-       name
-       id)))
+(defconst forge--github-discussions-fragment
+  '((discussions
+     [(:edges 20)
+      (:singular discussion number)
+      (orderBy ((field UPDATED_AT) (direction DESC)))]
+     number
+     id
+     databaseId
+     url
+     stateReason
+     ;; Discussions lack isReadByViewer.
+     (answer id)
+     (author login)
+     title
+     createdAt
+     updatedAt
+     closedAt
+     locked
+     (category id)
+     body
+     (  comments [(:edges t)]
+        id
+        databaseId
+        (author login)
+        createdAt
+        updatedAt
+        body
+        (  replies [(:edges t)]
+           id
+           databaseId
+           (author login)
+           createdAt
+           updatedAt
+           body))
+     (  labels [(:edges t)] id))))
 
-(defconst forge--github-sparse-repository-query
-  '(query
-    (  repository
-       [(owner $owner String!)
-        (name  $name  String!)]
-       (owner login)
-       name
+(defconst forge--github-issues-fragment
+  '((issues
+     [(:edges t)
+      (:singular issue number)
+      (orderBy ((field UPDATED_AT) (direction DESC)))]
+     number
+     id
+     state
+     stateReason
+     isReadByViewer
+     (author login)
+     title
+     createdAt
+     updatedAt
+     closedAt
+     locked
+     (milestone id)
+     body
+     (  assignees [(:edges t)] id)
+     (  comments [(:edges t)]
+        id
+        databaseId
+        (author login)
+        createdAt
+        updatedAt
+        body)
+     (  labels [(:edges t)] id))))
+
+(defconst forge--github-pullreqs-fragment
+  '((pullRequests
+     [(:edges t)
+      (:singular pullRequest number)
+      (orderBy ((field UPDATED_AT) (direction DESC)))]
+     number
+     id
+     state
+     isReadByViewer
+     (author login)
+     title
+     createdAt
+     updatedAt
+     closedAt
+     mergedAt
+     isDraft
+     locked
+     maintainerCanModify
+     isCrossRepository
+     (milestone id)
+     body
+     (baseRef name (repository nameWithOwner))
+     baseRefOid
+     (headRef name (repository (owner login) nameWithOwner))
+     headRefOid
+     (  assignees [(:edges t)] id)
+     (  reviewRequests [(:edges t)]
+        (requestedReviewer "... on User { id }\n"))
+     (  comments [(:edges t)]
+        id
+        databaseId
+        (author login)
+        createdAt
+        updatedAt
+        body)
+     (  labels [(:edges t)] id))))
+
+(defconst forge--github-repository-fragment
+  `((owner login)
+    name
+    id
+    createdAt
+    updatedAt
+    nameWithOwner
+    (parent nameWithOwner)
+    description
+    homepageUrl
+    (defaultBranchRef name)
+    isArchived
+    isFork
+    isLocked
+    isMirror
+    isPrivate
+    hasDiscussionsEnabled
+    hasIssuesEnabled
+    hasWikiEnabled
+    (licenseInfo name)
+    (stargazers totalCount)
+    (watchers totalCount)
+    (  assignableUsers [(:edges t)]
        id
+       login
+       name)
+    (  discussionCategories [(:edges t)]
+       id
+       name
+       emoji
+       isAnswerable
+       description)
+    ;; Disabled for now because likely too expensive.
+    ;; (  forks [(:edges t)]
+    ;;    id
+    ;;    (owner login)
+    ;;    name)
+    (  labels [(:edges t) (:singular label id)]
+       id
+       name
+       color
+       description)
+    (  milestones [(:edges t) (:singular milestone id)]
+       id
+       number
+       title
        createdAt
        updatedAt
-       nameWithOwner
-       (parent nameWithOwner)
-       description
-       homepageUrl
-       (defaultBranchRef name)
-       isArchived
-       isFork
-       isLocked
-       isMirror
-       isPrivate
-       hasDiscussionsEnabled
-       hasIssuesEnabled
-       hasWikiEnabled
-       (licenseInfo name)
-       (stargazers totalCount)
-       (watchers totalCount))))
+       dueOn
+       closedAt
+       description)
+    (  issueTemplates
+       name
+       filename
+       about
+       title
+       body
+       (  type name )
+       (  assignees [(:edges t)] login)
+       (  labels [(:edges t)] name))
+    (  pullRequestTemplates
+       body
+       filename)))
 
-(defconst forge--github-repository-query
-  `(query
-    (  repository
-       ,@(cdr (cadr forge--github-sparse-repository-query))
-       (  assignableUsers [(:edges t)]
-          id
-          login
-          name)
-       (  discussionCategories [(:edges t)]
-          id
-          name
-          emoji
-          isAnswerable
-          description)
-       (  discussions [(:edges 20)
-                       (:singular discussion number)
-                       (orderBy ((field UPDATED_AT) (direction DESC)))]
-          number
-          id
-          databaseId
-          url
-          stateReason
-          ;; Discussions lack isReadByViewer.
-          (answer id)
-          (author login)
-          title
-          createdAt
-          updatedAt
-          closedAt
-          locked
-          (category id)
-          body
-          (  comments [(:edges t)]
-             id
-             databaseId
-             (author login)
-             createdAt
-             updatedAt
-             body
-             (  replies [(:edges t)]
-                id
-                databaseId
-                (author login)
-                createdAt
-                updatedAt
-                body))
-          (   labels [(:edges t)] id))
-       ;; Disabled for now because likely too expensive.
-       ;; (  forks [(:edges t)]
-       ;;    id
-       ;;    (owner login)
-       ;;    name)
-       (  issues [(:edges t)
-                  (:singular issue number)
-                  (orderBy ((field UPDATED_AT) (direction DESC)))]
-          number
-          id
-          state
-          stateReason
-          isReadByViewer
-          (author login)
-          title
-          createdAt
-          updatedAt
-          closedAt
-          locked
-          (milestone id)
-          body
-          (  assignees [(:edges t)] id)
-          (  comments [(:edges t)]
-             id
-             databaseId
-             (author login)
-             createdAt
-             updatedAt
-             body)
-          (  labels [(:edges t)] id))
-       (  labels [(:edges t) (:singular label id)]
-          id
-          name
-          color
-          description)
-       (  milestones [(:edges t) (:singular milestone id)]
-          id
-          number
-          title
-          createdAt
-          updatedAt
-          dueOn
-          closedAt
-          description)
-       (  pullRequests [(:edges t)
-                        (:singular pullRequest number)
-                        (orderBy ((field UPDATED_AT) (direction DESC)))]
-          number
-          id
-          state
-          isReadByViewer
-          (author login)
-          title
-          createdAt
-          updatedAt
-          closedAt
-          mergedAt
-          isDraft
-          locked
-          maintainerCanModify
-          isCrossRepository
-          (milestone id)
-          body
-          (baseRef name (repository nameWithOwner))
-          baseRefOid
-          (headRef name (repository (owner login) nameWithOwner))
-          headRefOid
-          (  assignees [(:edges t)] id)
-          (  reviewRequests [(:edges t)]
-             (requestedReviewer "... on User { id }\n"))
-          (  comments [(:edges t)]
-             id
-             databaseId
-             (author login)
-             createdAt
-             updatedAt
-             body)
-          (  labels [(:edges t)] id))
-       (  issueTemplates
-          name
-          filename
-          about
-          title
-          body
-          (  type name )
-          (  assignees [(:edges t)] login)
-          (  labels [(:edges t)] name))
-       (  pullRequestTemplates
-          body
-          filename)
-       (  ("issueTemplateConfigA" object)
-          [(expression "HEAD:.github/ISSUE_TEMPLATE/config.yml")]
-          "... on Blob { text }\n")
-       (  ("issueTemplateConfigB" object)
-          [(expression "HEAD:.github/issue_template/config.yml")]
-          "... on Blob { text }\n"))
-    (  ("configRepository" repository)
-       [(owner $owner)
-        (name ".github")]
-       (  ("issueTemplateConfigC" object)
-          [(expression "HEAD:.github/ISSUE_TEMPLATE/config.yml")]
-          "... on Blob { text }\n")
-       (  ("issueTemplateConfigD" object)
-          [(expression "HEAD:.github/issue_template/config.yml")]
-          "... on Blob { text }\n"))))
+(defconst forge--github-issue-template-config-fragment
+  '((("issueTemplateConfigA" object)
+     [(expression "HEAD:.github/ISSUE_TEMPLATE/config.yml")]
+     "... on Blob { text }\n")
+    (("issueTemplateConfigB" object)
+     [(expression "HEAD:.github/issue_template/config.yml")]
+     "... on Blob { text }\n")))
 
 ;;;; Repository
 
 (cl-defmethod forge--identify-repo ((_class (subclass forge-github-repository))
                                     host owner name)
   (pcase-let ((`(,_ ,apihost ,hostid ,_) (forge--get-forge-host host t)))
-    (let-alist (ghub-query forge--github-identify-repo-query
+    (let-alist (ghub-query
+                (forge--prepare-repo-query '((owner login) name id))
                  `((owner . ,owner)
                    (name  . ,name))
                  :host apihost
@@ -274,12 +259,13 @@
   (forge--msg repo t nil "Pulling REPO")
   (pcase-let ((buf (current-buffer))
               ((eieio owner name remote) repo))
-    (forge--query repo
-      (if (oref repo selective-p)
-          forge--github-sparse-repository-query
-        forge--github-repository-query)
-      `((owner . ,owner)
-        (name  . ,name))
+    (forge-repo-query repo
+      (append forge--github-repository-fragment
+              (and (not (oref repo selective-p))
+                   (append forge--github-discussions-fragment
+                           forge--github-issues-fragment
+                           forge--github-pullreqs-fragment))
+              forge--github-issue-template-config-fragment)
       :callback
       (lambda (data)
         (forge--msg repo t t   "Pulling REPO")
@@ -312,6 +298,14 @@
         (cond (callback (funcall callback repo))
               ((oref repo selective-p))
               ((forge--maybe-git-fetch repo buf))))
+      ;; Issue links are omitted from the API and instead we have to
+      ;; get files using the generic Git object API, including files
+      ;; from the "ACCOUNT/.github" repository.
+      :other-fragments
+      `(("configRepository" repository)
+        [(owner $owner)
+         (name ".github")]
+        ,@forge--github-issue-template-config-fragment)
       ;; If the only error is about the "ACCOUNT/.github" repository
       ;; not being found, simply drop that, as this is expected.
       :noerror (lambda (errors)
@@ -437,24 +431,11 @@
 (cl-defmethod forge--pull-topic ((repo forge-github-repository)
                                  (number number)
                                  &optional callback)
-  (forge--query repo
-    `(query
-      [($owner String!)
-       ($name  String!)]
-      (repository
-       [(owner $owner)
-        (name  $name)]
-       ,(caddr (caddr (ghub--graphql-prepare-query
-                       forge--github-repository-query
-                       `(repository discussions (discussion . ,number)))))
-       ,(caddr (caddr (ghub--graphql-prepare-query
-                       forge--github-repository-query
-                       `(repository issues (issue . ,number)))))
-       ,(caddr (caddr (ghub--graphql-prepare-query
-                       forge--github-repository-query
-                       `(repository pullRequests (pullreq . ,number)))))))
-    `((owner . ,(oref repo owner))
-      (name  . ,(oref repo name)))
+  (forge-repo-query repo
+    (nconc
+     (forge--singularize-fragment forge--github-discussions-fragment number)
+     (forge--singularize-fragment forge--github-issues-fragment number)
+     (forge--singularize-fragment forge--github-pullreqs-fragment number))
     :noerror t
     :callback (lambda (data)
                 (let-alist data
@@ -470,31 +451,35 @@
 
 (cl-defmethod forge--pull-topic ((repo forge-github-repository)
                                  (topic forge-discussion)
-                                 &optional _)
-  (forge--pull-topic-1 repo #'forge--update-discussion
-    `(repository discussions (discussion . ,(oref topic number)))))
+                                 &optional callback)
+  (forge-repo-query repo
+    (forge--singularize-fragment forge--github-discussions-fragment
+                                 (oref topic number))
+    :callback (forge--pull-topic-callback repo #'forge--update-discussion
+                                          callback)))
 
 (cl-defmethod forge--pull-topic ((repo forge-github-repository)
                                  (topic forge-issue)
                                  &optional _)
-  (forge--pull-topic-1 repo #'forge--update-issue
-    `(repository issues (issue . ,(oref topic number)))))
+  (forge-repo-query repo
+    (forge--singularize-fragment forge--github-issues-fragment
+                                 (oref topic number))
+    :callback (forge--pull-topic-callback repo #'forge--update-issue)))
 
 (cl-defmethod forge--pull-topic ((repo forge-github-repository)
                                  (topic forge-pullreq)
                                  &optional _)
-  (forge--pull-topic-1 repo #'forge--update-pullreq
-    `(repository pullRequests (pullRequest . ,(oref topic number)))))
+  (forge-repo-query repo
+    (forge--singularize-fragment forge--github-pullreqs-fragment
+                                 (oref topic number))
+    :callback (forge--pull-topic-callback repo #'forge--update-pullreq)))
 
-(cl-defun forge--pull-topic-1 (repo update narrow)
-  (declare (indent defun))
-  (forge--query repo
-    (ghub--graphql-prepare-query forge--github-repository-query narrow)
-    `((owner . ,(oref repo owner))
-      (name  . ,(oref repo name)))
-    :callback (lambda (data)
-                (funcall update repo (cdr (cadr (cadr data))))
-                (forge-refresh-buffer))))
+(defun forge--pull-topic-callback (repo update &optional callback)
+  (lambda (data)
+    (funcall update repo (cdr (cadr (cadr data))))
+    (when callback
+      (funcall callback))
+    (forge-refresh-buffer)))
 
 (cl-defmethod forge--update-status ((repo forge-github-repository)
                                     topic data bump initial-pull)
@@ -853,20 +838,12 @@
                  `((,alias repository)
                    [(name ,name)
                     (owner ,owner)]
-                   ,@(cddr
-                      (caddr
-                       (ghub--graphql-prepare-query
-                        forge--github-repository-query
-                        (pcase type
-                          ('discussion `(repository
-                                         discussions
-                                         (discussion . ,number)))
-                          ('issue      `(repository
-                                         issues
-                                         (issue . ,number)))
-                          ('pullreq    `(repository
-                                         pullRequest
-                                         (pullRequest . ,number))))))))
+                   ,@(forge--singularize-fragment
+                      (pcase type
+                        ('discussion forge--github-discussions-fragment)
+                        ('issue      forge--github-issues-fragment)
+                        ('pullreq    forge--github-pullreqs-fragment))
+                      number))
                  repo type data)))))
 
 (defun forge--ghub-update-notifications (notifs topics initial-pull)
@@ -903,8 +880,8 @@
         (issue-config      (let-alist data
                              (or .repository.issueTemplateConfigA
                                  .repository.issueTemplateConfigB
-                                 .configRepository.issueTemplateConfigC
-                                 .configRepository.issueTemplateConfigD))))
+                                 .configRepository.issueTemplateConfigA
+                                 .configRepository.issueTemplateConfigB))))
     (oset
      repo topic-templates
      (nconc
